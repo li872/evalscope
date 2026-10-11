@@ -36,6 +36,15 @@ def collect_planned_attempts(
     return grouped
 
 
+CORRECT_THRESHOLD = 1.0
+"""An attempt counts as correct for pass@k / pass^k only when its score reaches this value."""
+
+
+def count_correct(values: List[float]) -> int:
+    """Count fully correct attempts; partial scores such as 0.5 are not summed into a pass."""
+    return sum(1 for value in values if value >= CORRECT_THRESHOLD)
+
+
 def eligible_prefixes(
     grouped: Dict[Any, Dict[int, Optional[SampleScore]]],
 ) -> Dict[int, List[Tuple[Any, Dict[int, Optional[SampleScore]]]]]:
@@ -199,7 +208,7 @@ class MeanPassAtK(Aggregator):
 
         For each metric:
         - Group scores by group_id
-        - Collect binary correctness values
+        - Count attempts scoring at least 1.0 as correct (partial scores are not summed)
         - Limit k to the number of attempts available in every group
         - Compute per-group pass@n for all n from 1 to k via calculate_pass_at_k
         - Emit ``aggregation=pass_at_k`` and ``dimensions.k=n`` directly
@@ -222,7 +231,7 @@ class MeanPassAtK(Aggregator):
                     for _, attempts in eligible
                 ]
                 values = calculate_pass_at_k(
-                    [len(items) for items in values_by_group], [int(sum(items)) for items in values_by_group], n
+                    [len(items) for items in values_by_group], [count_correct(items) for items in values_by_group], n
                 )
                 aggregated_scores.append(
                     AggScore(
@@ -336,7 +345,7 @@ class MeanPassHatK(Aggregator):
 
         For each metric:
         - Group scores by group_id
-        - Collect binary correctness values
+        - Count attempts scoring at least 1.0 as correct (partial scores are not summed)
         - Limit k to the number of attempts available in every group
         - Compute per-group pass^n for all n from 1 to k via calculate_pass_hat_k
         - Emit ``aggregation=pass_hat_k`` and ``dimensions.k=n`` directly
@@ -359,7 +368,7 @@ class MeanPassHatK(Aggregator):
                     attempt_values = [
                         float(attempt.score.value[metric_name]) for attempt in attempts.values() if attempt is not None
                     ]
-                    values.append(float(calculate_pass_hat_k(len(attempt_values), int(sum(attempt_values)), n)))
+                    values.append(float(calculate_pass_hat_k(len(attempt_values), count_correct(attempt_values), n)))
                     ids.append(group_id)
                 aggregated_scores.append(
                     AggScore(
